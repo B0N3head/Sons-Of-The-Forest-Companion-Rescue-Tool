@@ -112,7 +112,7 @@ namespace SonsOfTheForestCompanionRescue
             {
                 gameStateData["IsVirginiaDead"] = false;
             }
-            gameSavesComboBox_SelectedIndexChanged(null, null);
+            UpdateUIValues();
         }
 
         private void gameSavesComboBox_SelectedIndexChanged(object sender, EventArgs e)
