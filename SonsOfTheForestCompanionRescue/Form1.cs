@@ -161,7 +161,6 @@ namespace SonsOfTheForestCompanionRescue
             virginiaPosXNumeric.Value = (decimal)_virginia.X;
             virginiaPosYNumeric.Value = (decimal)_virginia.Y;
             virginiaPosZNumeric.Value = (decimal)_virginia.Z;
-            Debug.WriteLine("hit!");
         }
 
         private void MoveNPCToLocation(NPC npc, double x, double y, double z)
