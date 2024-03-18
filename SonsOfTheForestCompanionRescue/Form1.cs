@@ -8,14 +8,17 @@ namespace SonsOfTheForestCompanionRescue
 {
     public partial class Form1 : Form
     {
-        private static readonly string _gameProcessName = "SonsOfTheForest";
+        private const string _gameProcessName = "SonsOfTheForest";
 
-        private static readonly int _kelvinInternalTypeID = 9;
-        private static readonly int _virginiaInternalTypeID = 10;
+        private const int _kelvinInternalTypeID = 9;
+        private const int _virginiaInternalTypeID = 10;
 
         private static readonly double[] safePos = { -627, 100, 533 };
 
         private GameSave _currentlyEditedSave;
+        private int _currentEditedSaveIndex = -1;
+
+        private bool _isDirty = false;
         private NPC _kelvin;
         private NPC _virginia;
 
@@ -113,10 +116,29 @@ namespace SonsOfTheForestCompanionRescue
                 gameStateData["IsVirginiaDead"] = false;
             }
             UpdateUIValues();
+            _isDirty = true;
         }
 
         private void gameSavesComboBox_SelectedIndexChanged(object sender, EventArgs e)
         {
+            if (_isDirty && ((GameSaveItem)gameSavesComboBox.SelectedItem).Location != _currentlyEditedSave.DirPath)
+            {
+                var checkCloseSaveResult = MessageBox.Show($"Would you like to save your current chages to {_currentlyEditedSave.Name} ?", "Save changes", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Information);
+                if (checkCloseSaveResult == DialogResult.Yes)
+                {
+                    _currentlyEditedSave.WriteChanges();
+                }
+                else if (checkCloseSaveResult == DialogResult.Cancel)
+                {
+                    gameSavesComboBox.SelectedIndex = _currentEditedSaveIndex;
+                    return;
+                }
+            }
+            if (_currentlyEditedSave != null && ((GameSaveItem)gameSavesComboBox.SelectedItem).Location == _currentlyEditedSave.DirPath)
+            {
+                return;
+            }
+            _currentEditedSaveIndex = gameSavesComboBox.SelectedIndex;
             var saveItem = (GameSaveItem)gameSavesComboBox.SelectedItem;
             var save = new GameSave(saveItem.Location);
             _currentlyEditedSave = save;
@@ -129,7 +151,8 @@ namespace SonsOfTheForestCompanionRescue
             _virginia = new NPC(_virginiaInternalTypeID, save);
 
             UpdateUIValues();
-            
+            _isDirty = false;
+
         }
 
         private void UpdateUIValues()
@@ -169,31 +192,19 @@ namespace SonsOfTheForestCompanionRescue
             npc.Y.Value = y;
             npc.Z.Value = z;
             UpdateUIValues();
+            _isDirty = true;
         }
 
         private void saveChangesButton_Click(object sender, EventArgs e)
         {
             _currentlyEditedSave.WriteChanges();
+            _isDirty = false;
         }
 
         private void kelvinHealthNumeric_ValueChanged(object sender, EventArgs e)
         {
             _kelvin.Health.Value = (double)kelvinHealthNumeric.Value;
-        }
-
-        private void kelvinPosXNumeric_ValueChanged(object sender, EventArgs e)
-        {
-            _kelvin.X.Value = (double)kelvinPosXNumeric.Value;
-        }
-
-        private void kelvinPosYNumeric_ValueChanged(object sender, EventArgs e)
-        {
-            _kelvin.Y.Value = (double)kelvinPosYNumeric.Value;
-        }
-
-        private void kelvinPosZNumeric_ValueChanged(object sender, EventArgs e)
-        {
-            _kelvin.Z.Value = (double)kelvinPosZNumeric.Value;
+            _isDirty = true;
         }
 
         private void moveKelvinToPlayerButton_Click(object sender, EventArgs e)
@@ -233,21 +244,7 @@ namespace SonsOfTheForestCompanionRescue
         private void virginiaHealthNumeric_ValueChanged(object sender, EventArgs e)
         {
             _virginia.Health.Value = (double)virginiaHealthNumeric.Value;
-        }
-
-        private void virginiaPosXNumeric_ValueChanged(object sender, EventArgs e)
-        {
-            _virginia.X.Value = (double)virginiaPosXNumeric.Value;
-        }
-
-        private void virginiaPosYNumeric_ValueChanged(object sender, EventArgs e)
-        {
-            _virginia.Y.Value = (double)virginiaPosYNumeric.Value;
-        }
-
-        private void virginiaPosZNumeric_ValueChanged(object sender, EventArgs e)
-        {
-            _virginia.Z.Value = (double)virginiaPosZNumeric.Value;
+            _isDirty = true;
         }
 
         private void kelvinResurrectButton_Click(object sender, EventArgs e)
@@ -263,6 +260,25 @@ namespace SonsOfTheForestCompanionRescue
         private void repoLinkLabel_LinkClicked(object sender, LinkLabelLinkClickedEventArgs e)
         {
             Process.Start("explorer.exe", repoLinkLabel.Text);
+        }
+
+        private void Form1_FormClosing(object sender, FormClosingEventArgs e)
+        {
+            if (e.CloseReason == CloseReason.UserClosing)
+            {
+                if (_isDirty)
+                {
+                    var checkCloseSaveResult = MessageBox.Show($"Would you like to save your current chages to {_currentlyEditedSave.Name} ?", "Save changes", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Information);
+                    if (checkCloseSaveResult == DialogResult.Yes)
+                    {
+                        _currentlyEditedSave.WriteChanges();
+                    }
+                    else if (checkCloseSaveResult == DialogResult.Cancel)
+                    {
+                        e.Cancel = true;
+                    }
+                }
+            }
         }
     }
 }
