@@ -1,18 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using Newtonsoft.Json.Linq;
 using SonsOfTheForest.Saves;
 
 namespace SonsOfTheForestCompanionRescue
 {
-    public enum CompanionStatus
-    {
-        Alive,
-        Deceased
-    }
 
     public class NPC
     {
@@ -24,7 +17,13 @@ namespace SonsOfTheForestCompanionRescue
 
         public int TypeID { get; private set; }
         public JToken Data { get; private set; }
-        public CompanionStatus Status { get; private set; }
+        public bool Alive
+        {
+            get
+            {
+                return (int)Health > 0;
+            }
+        }
         public JValue Health { get; private set; }
 
         public JValue X { get; private set; }
@@ -45,14 +44,6 @@ namespace SonsOfTheForestCompanionRescue
             X = (JValue)Data["Position"]["x"];
             Y = (JValue)Data["Position"]["y"];
             Z = (JValue)Data["Position"]["z"];
-            if ((int)Health <= 0)
-            {
-                Status = CompanionStatus.Deceased;
-            }
-            else
-            {
-                Status = CompanionStatus.Alive;
-            }
         }
     }
 }

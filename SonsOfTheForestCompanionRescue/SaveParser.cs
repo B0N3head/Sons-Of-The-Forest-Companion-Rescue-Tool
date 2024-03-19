@@ -1,91 +1,255 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using Newtonsoft.Json.Linq;
+﻿using Newtonsoft.Json.Linq;
+using System.IO.Compression;
+using System.Collections.ObjectModel;
 
 namespace SonsOfTheForest.Saves
 {
-    public enum SaveReadMode
-    {
-        /// <summary>
-        /// Represents the three core files: PlayerStateSaveData, SaveData, GameStateSaveData.
-        /// </summary>
-        Core,
-        /// <summary>
-        /// Represents all files in the given save.
-        /// </summary>
-        Extended
-    }
-
     public enum GameSaveType
     {
+        /// <summary>
+        /// Indicates a multiplayer save. These saves only appear on the host machine and contain server world specific info.
+        /// </summary>
         Multiplayer,
+        /// <summary>
+        /// Indicates a singleplayer save.
+        /// </summary>
         Singleplayer,
+        /// <summary>
+        /// Indicates a multiplayer client save. These saves only appear on a machine that connected to a remotely hosted server, and only contain player specific info.
+        /// </summary>
         MultiplayerClient
     }
 
-    public static class SaveParser
+    public static class SaveManager
     {
         /// <summary>
         /// The root Saves folder where all the saves are located.
+        /// %userprofile%\appdata\locallow\Endnight\SonsOfTheForest\Saves\
         /// </summary>
-        private static readonly string _savesRoot = @$"{Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData))}Low\Endnight\SonsOfTheForest\Saves";
+        public static readonly string SavesDirectory = @$"{Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData)}Low\Endnight\SonsOfTheForest\Saves";
 
         /// <summary>
-        /// Determines how many files <see cref="GameSave"/> instances read. 
-        /// By default it is set to <see cref="SaveReadMode.Core", and only reads the three core files: PlayerStateSaveData, SaveData, GameStateSaveData.
-        /// Setting this to <see cref="SaveReadMode.Extended"/> reads all files in the given save.</see>/>
-        /// </summary>
-        public static SaveReadMode ReadMode = SaveReadMode.Core;
-
-        /// <summary>
-        /// Gets and returns a list of <see cref="GameSave"/>s. Ignores MultiplayerClient saves by default.
+        /// Gets and returns a list of <see cref="GameSaveItem"/>s. Ignores MultiplayerClient saves by default.
         /// </summary>
         /// <param name="includeClientSaves">If set to <see langword="true"/>, the retured list also includes <see cref="GameSaveType.MultiplayerClient"/> saves.</param>
         /// <returns></returns>
-        public static List<GameSave> GetSavesList(bool includeClientSaves = false)
+        public static List<GameSaveItem> GetSavesList(bool includeClientSaves = false)
         {
-            var saveIdPath = Directory.GetDirectories(_savesRoot)[0];
-            List<GameSave> saves = new List<GameSave>();
-
-            if (Directory.Exists(saveIdPath + "\\Multiplayer"))
+            var saveIdPath = Directory.GetDirectories(SavesDirectory)[0];
+            List<GameSaveItem> saves = new List<GameSaveItem>();
+            
+            var types = Enum.GetNames(typeof(GameSaveType));
+            if (includeClientSaves == false)
             {
-                var multiplayerSavesPaths = Directory.GetDirectories(saveIdPath + "\\Multiplayer");
-                foreach (var multiplayerSavePath in multiplayerSavesPaths)
-                {
-                    saves.Add(new GameSave(multiplayerSavePath));
-                }
+                types[2] = "";
             }
-            if (Directory.Exists(saveIdPath + "\\Singleplayer"))
+            foreach (var type in types)
             {
-                var singleplayerSavesPaths = Directory.GetDirectories(saveIdPath + "\\Singleplayer");
-                foreach (var singleplayerSavePath in singleplayerSavesPaths)
+                var saveTypeDirPath = Path.Combine(saveIdPath, type);
+                if (String.IsNullOrEmpty(type) == false && Directory.Exists(saveTypeDirPath))
                 {
-                    saves.Add(new GameSave(singleplayerSavePath));
-                }
-            }
-            if (includeClientSaves == true && Directory.Exists(saveIdPath + "\\MultiplayerClient"))
-            {
-                var clientSavesPaths = Directory.GetDirectories(saveIdPath + "\\MultiplayerClient");
-                foreach (var clientSavePath in clientSavesPaths)
-                {
-                    saves.Add(new GameSave(clientSavePath));
+                    var items = Directory.GetDirectories(saveTypeDirPath);
+                    foreach (var item in items)
+                    {
+                        // Filter out EA saves
+                        if (File.Exists(Path.Combine(item, GameSave.SaveFileName)))
+                        {
+                            saves.Add(new GameSaveItem(item));
+                        }
+                    }
                 }
             }
             return saves;
         }
+    }
+
+    public struct GameSaveItem
+    {
+        public string ID { get; private set; }
+        public string Name { get; private set; }
+        public string Location { get; private set; }
+        public string ThumbnailPath { get; private set; }
+        public GameSaveType Type { 
+            get 
+            {
+                if (Location.Contains("MultiplayerClient"))
+                {
+                    return GameSaveType.MultiplayerClient;
+                }
+                else if (Location.Contains("Singleplayer"))
+                {
+                    return GameSaveType.Singleplayer;
+                }
+                else
+                {
+                    return GameSaveType.Multiplayer;
+                }
+            } 
+        }
+
+        public string DisplayName
+        {
+            get
+            {
+                return $"[{Type}] {Name}";
+            }
+        }
+
+        internal GameSaveItem(string path)
+        {
+            Location = path;
+            ID = Path.GetFileName(Location);
+            ThumbnailPath = Path.Combine(Location, GameSave.ThumbnailFileName);
+            Name = Path.GetFileName(Directory.GetFiles(Location).FirstOrDefault(file => file.EndsWith(".name"), "UnknownGameSave")).Replace(".name", "");
+        }
+    }
+
+    /// <summary>
+    /// Represents a game save and its contents.
+    /// </summary>
+    public class GameSave
+    {
+        /// <summary>
+        /// The root directory of the save.
+        /// </summary>
+        public string DirPath { get; private set; }
+        public const string ThumbnailFileName = "SaveDataThumbnail.png";
+        public const string SaveFileName = "SaveData.zip";
+        /// <summary>
+        /// The internal ID of the save.
+        /// </summary>
+        public string ID { get; private set; }
+        /// <summary>
+        /// The in-game name of the save.
+        /// </summary>
+        public string Name { get; private set; }
+        /// <summary>
+        /// The host type of the save.
+        /// </summary>
+        public GameSaveType Type { get; private set; }
+        /// <summary>
+        /// The time this game was last saved at.
+        /// </summary>
+        public DateTime SaveTime { get; private set; }
+        /// <summary>
+        /// Contains the list and contents of the save files within this save, dependent on <seealso cref="SaveParser.ReadMode"/>.
+        /// </summary>
+        public ReadOnlyDictionary<string, JObject> Contents { get; private set; }
+
+        public GameSave(string savePath)
+        {
+            DirPath = savePath;
+            // Get list of files in the real save directory (not in the zip folder)
+            var saveDirFiles = Directory.GetFiles(DirPath);
+            if (saveDirFiles.Length > 0 )
+            {
+                if (File.Exists(Path.Combine(DirPath, SaveFileName)) == false)
+                {
+                    throw new Exception($"Game save at {DirPath} is missing main save data zip file. Early-access saves are no longer supported by this version.");
+                }
+            }
+            else
+            {
+                throw new Exception($"Game save folder at {DirPath} exists but has no contents.");
+            }
+            
+            ID = Path.GetFileName(savePath);
+            Type = GetSaveType();
+            LoadFiles();
+            var saveTimeString = Contents["GameStateSaveData.json"].SelectToken("Data.GameState.SaveTime")?.ToString();
+            SaveTime = saveTimeString != null ? DateTime.Parse(saveTimeString) : File.GetCreationTime(Path.Combine(DirPath, SaveFileName));
+            Name = Path.GetFileName(saveDirFiles.FirstOrDefault(file => file.EndsWith(".name"), "UnknownGameSave")).Replace(".name", "");
+        }
+
+        public GameSave(GameSaveItem saveItem) : this(saveItem.Location) { }
 
         /// <summary>
-        /// Custom parser to correctly deserialise the faulty JSON format the saves use.
+        /// Saves and overwrites the contents of the approriate savefiles with the data in <see cref="Contents"/>.
         /// </summary>
-        /// <param name="path"></param>
-        /// <returns></returns>
-        public static JObject ReadFile(string path)
+        public void WriteChanges()
         {
-            string fileString = File.ReadAllText(path);
-            JObject json = JObject.Parse(fileString);
+            var backupFilePath = Path.Combine(DirPath, $"{SaveFileName}.backup");
+            // Create backup
+            if (File.Exists(backupFilePath))
+                File.Delete(backupFilePath);
+            File.Copy(Path.Combine(DirPath, SaveFileName), backupFilePath);
+            //
+            using (MemoryStream ms = new MemoryStream())
+            {
+                using (ZipArchive archive = new ZipArchive(ms, ZipArchiveMode.Create, true))
+                {
+                    foreach (var item in Contents)
+                    {
+                        var file = archive.CreateEntry(item.Key);
+                        using (var fileStream = file.Open())
+                        {
+                            using (var writer = new StreamWriter(fileStream))
+                            {
+                                writer.Write(SerialiseFile(item.Value));
+                            }
+                        }
+                    }
+                }
+                using (var fileStream = new FileStream(Path.Combine(DirPath, SaveFileName), FileMode.Create))
+                {
+                    ms.Seek(0, SeekOrigin.Begin);
+                    ms.CopyTo(fileStream);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Returns the save's thumbnail image.
+        /// </summary>
+        /// <returns></returns>
+        public Image GetThumbnail() 
+        {
+            return Image.FromFile(Path.Combine(DirPath, ThumbnailFileName));
+        }
+
+        private GameSaveType GetSaveType()
+        {
+            if (DirPath.Contains("MultiplayerClient"))
+            {
+                return GameSaveType.MultiplayerClient;
+            }
+            else if (DirPath.Contains("Singleplayer"))
+            {
+                return GameSaveType.Singleplayer;
+            }
+            else
+            {
+                return GameSaveType.Multiplayer;
+            }
+        }
+
+        /// <summary>
+        /// Loads the save's contents into memory.
+        /// </summary>
+        private void LoadFiles()
+        {
+            var files = new Dictionary<string, JObject>();   
+            using (ZipArchive archive = ZipFile.OpenRead(Path.Combine(DirPath, SaveFileName)))
+            {
+                var contents = archive.Entries;
+                foreach (var file in contents)
+                {
+                    using (var fileStream = file.Open())
+                    {
+                        using (var reader = new StreamReader(fileStream))
+                        {
+                            var content = reader.ReadToEnd();
+                            files.Add(file.Name, ParseFile(content));
+                        }
+                    }
+                }
+            }
+            Contents = new ReadOnlyDictionary<string, JObject>(files);
+        }
+
+        private JObject ParseFile(string content)
+        {
+            JObject json = JObject.Parse(content);
             JObject saveData = (JObject)json["Data"];
 
             /*
@@ -102,12 +266,7 @@ namespace SonsOfTheForest.Saves
             return json;
         }
 
-        /// <summary>
-        /// Custom parser to correctly serialise to the faulty JSON format the saves use.
-        /// </summary>
-        /// <param name="path"></param>
-        /// <param name="contents"></param>
-        public static void WriteFile(string path, JObject contents)
+        private string SerialiseFile(JObject contents)
         {
             JObject save = new JObject(contents);
             JObject saveData = (JObject)save["Data"];
@@ -123,112 +282,7 @@ namespace SonsOfTheForest.Saves
                 saveData[kvp.Key] = stringEntry;
             }
 
-            File.WriteAllText(path, save.ToString(Newtonsoft.Json.Formatting.None));
-        }
-    }
-
-    /// <summary>
-    /// Represents a game save and its contents.
-    /// </summary>
-    public class GameSave
-    {
-        /// <summary>
-        /// The root directory of the save.
-        /// </summary>
-        public string MainDirPath { get; private set; }
-        /// <summary>
-        /// The internal ID of the save.
-        /// </summary>
-        public string ID { get; private set; }
-        /// <summary>
-        /// A quick at-glance identifier of the save.
-        /// </summary>
-        public string DisplayName { get; private set; }
-        /// <summary>
-        /// The host type of the save.
-        /// </summary>
-        public GameSaveType Type { get; private set; }
-        /// <summary>
-        /// The time this game was last saved at.
-        /// </summary>
-        public DateTime SaveTime { get; private set; }
-        /// <summary>
-        /// The last write time of this save's main file.
-        /// </summary>
-        public DateTime LastEditTime { get; private set; }
-        /// <summary>
-        /// Contains the list and contents of the save files within this save, dependent on <seealso cref="SaveParser.ReadMode"/>.
-        /// </summary>
-        public Dictionary<string, JObject> Contents = new Dictionary<string, JObject>();
-
-        public GameSave(string savePath)
-        {
-            MainDirPath = savePath;
-            ID = Path.GetFileName(savePath);
-            Type = GetSaveType();
-            LastEditTime = File.GetLastWriteTime(MainDirPath + "\\PlayerStateSaveData.json");
-            LoadSaveFiles();
-            var saveTimeString = Contents["GameStateSaveData.json"].SelectToken("Data.GameState.SaveTime").ToString();
-            SaveTime = DateTime.Parse(saveTimeString);
-            DisplayName = $"[{Type}] [{SaveTime}] - {ID}";
-        }
-
-        /// <summary>
-        /// Saves and overwrites the contents of the approriate savefiles with the data in <see cref="Contents"/>.
-        /// </summary>
-        public void WriteChanges()
-        {
-            foreach (var file in Contents)
-            {
-                var filePath = Path.Combine(MainDirPath, file.Key);
-                SaveParser.WriteFile(filePath, file.Value);
-            }
-        }
-
-        private GameSaveType GetSaveType()
-        {
-            if (MainDirPath.Contains("MultiplayerClient"))
-            {
-                return GameSaveType.MultiplayerClient;
-            }
-            else if (MainDirPath.Contains("Singleplayer"))
-            {
-                return GameSaveType.Singleplayer;
-            }
-            else
-            {
-                return GameSaveType.Multiplayer;
-            }
-        }
-
-        /// <summary>
-        /// If <see cref="SaveParser.ReadMode"/> is set to <see cref="SaveReadMode.Core"/>, loads the three core files,
-        /// otherwise loads the entire save contents.
-        /// </summary>
-        private void LoadSaveFiles()
-        {
-            if (SaveParser.ReadMode == SaveReadMode.Extended)
-            {
-                var files = Directory.GetFiles(MainDirPath);
-                foreach (var file in files)
-                {
-                    var fileName = Path.GetFileName(file);
-                    if (fileName.EndsWith(".png") != true)
-                    {
-                        Contents.Add(fileName, SaveParser.ReadFile(file));
-                    }
-                }
-            }
-            else
-            {
-                var playerStateSaveDataPath = $"{MainDirPath}\\PlayerStateSaveData.json";
-                var gameStateSaveDataPath = $"{MainDirPath}\\GameStateSaveData.json";
-                var saveDataPath = $"{MainDirPath}\\SaveData.json";
-
-                Contents.Add(Path.GetFileName(saveDataPath), SaveParser.ReadFile(saveDataPath));
-                Contents.Add(Path.GetFileName(gameStateSaveDataPath), SaveParser.ReadFile(gameStateSaveDataPath));
-                Contents.Add(Path.GetFileName(playerStateSaveDataPath), SaveParser.ReadFile(playerStateSaveDataPath));
-            }
+            return save.ToString(Newtonsoft.Json.Formatting.None);
         }
     }
 }

@@ -5,6 +5,8 @@ A small tool that helps with reviving and unstucking your beloved Kelvin (or Vir
 
 __As this tool edits your save files, always make a backup copy before committing changes to avoid issues or, in the worst case, corrupted saves. I take no responsibility for any of that, nor do I provide support to fix them.__
 
+__Note: Early access saves are no longer supported. Please use [the older version](https://github.com/Xerren09/Sons-Of-The-Forest-Companion-Rescue-Tool/releases/tag/v1.0.0) if you still want to edit them.__
+
 <img src="./docs/appScreenshot.png" width="50%" />
 
 ## Features
