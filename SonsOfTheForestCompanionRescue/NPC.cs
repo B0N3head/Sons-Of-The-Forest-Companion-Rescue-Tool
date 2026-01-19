@@ -21,7 +21,7 @@ namespace SonsOfTheForestCompanionRescue
         {
             get
             {
-                return (int)Health > 0;
+                return (Health?.Value<double?>() ?? 0d) > 0d;
             }
         }
         public JValue Health { get; private set; }
@@ -40,10 +40,39 @@ namespace SonsOfTheForestCompanionRescue
             {
                 throw new Exception($"No NPC with {npcTypeId} was found.");
             }
-            Health = (JValue)Data["Stats"]["Health"];
-            X = (JValue)Data["Position"]["x"];
-            Y = (JValue)Data["Position"]["y"];
-            Z = (JValue)Data["Position"]["z"];
+
+            // Some save versions omit certain fields; ensure they're present so the UI can read/edit safely.
+            var dataObj = Data as JObject;
+            if (dataObj == null)
+            {
+                throw new Exception($"NPC data for {npcTypeId} was not an object.");
+            }
+
+            var statsObj = dataObj["Stats"] as JObject;
+            if (statsObj == null)
+            {
+                statsObj = new JObject();
+                dataObj["Stats"] = statsObj;
+            }
+            if (statsObj["Health"] == null || statsObj["Health"].Type == JTokenType.Null)
+            {
+                statsObj["Health"] = 0d;
+            }
+            Health = (JValue)statsObj["Health"];
+
+            var posObj = dataObj["Position"] as JObject;
+            if (posObj == null)
+            {
+                posObj = new JObject();
+                dataObj["Position"] = posObj;
+            }
+            if (posObj["x"] == null || posObj["x"].Type == JTokenType.Null) posObj["x"] = 0d;
+            if (posObj["y"] == null || posObj["y"].Type == JTokenType.Null) posObj["y"] = 0d;
+            if (posObj["z"] == null || posObj["z"].Type == JTokenType.Null) posObj["z"] = 0d;
+
+            X = (JValue)posObj["x"];
+            Y = (JValue)posObj["y"];
+            Z = (JValue)posObj["z"];
         }
     }
 }
